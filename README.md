@@ -260,3 +260,82 @@ float(7,4)列内插入999.00009 --> 999.0001//MySQL 保存值时进行四舍五�
 |`YEAR`|表示年份,YEAR有2位或4位格式的年。默认是4位格式|
 
 ## 字符串类型
+<img width="467" alt="Screen Shot 2021-11-06 at 1 27 17 PM" src="https://user-images.githubusercontent.com/27160394/140599097-e7de57aa-a86f-42b9-b525-dbac68e10cf6.png">
+
+### CHAR 和 VARCHAR 类型
+> 用来保存 MySQL 中较短的字符串
+二者的主要区别在于存储方式的不同:
+* `CHAR` 列的长度固定为创建表时声明的长度，长度可以为从 0~255 的任何值;
+* `VARCHAR`列中的值为可变长字符串，长度可以指定为0~255(5 5.0.3以前)或者6553(5 5.0.3 以后)之间的值
+* 在检索的时候，CHAR 列删除了尾部的空格，而 VARCHAR 则保留这些空格
+
+### BINARY 和 VARBINARY
+类似于 CHAR 和 VARCHAR,它们包含二进制字符串 而不包含非二进制字符串
+
+### ENUM 类型
+它的值范围需要在创建表时通过枚举方式显式指定,对 1~ 255个成员的枚举需要1个字节存储;对于 255~65535 个成员，需要2个字节存储
+* 忽略大小写的，都转成了大写，还可以看出对于插入不在 ENUM 指定范围内的值时，并没有返回警告，而是插入第一值
+* ENUM 类型只允许从值集合中选取单个值，而不能一次取多个值
+
+### SET 类型
+是一个字符串对象，里面可以包含 0~64 个成员
+```
+Create table t (col set ('a','b','c','d');
+insert into t values('a,b'),('a,d,a'),('a,b'),('a,c'),('a');
+```
+* SET 类型可以从允许值集合中选择任意 1 个或多个元素进行组合
+---
+# MySQL 中的运算符
+> 来连接表达式的项
+
+算术运算符、比较 运算符、逻辑运算符和位运算符
+
+## 算术运算符
+<img width="405" alt="Screen Shot 2021-11-06 at 1 38 50 PM" src="https://user-images.githubusercontent.com/27160394/140599258-940ded9f-a575-4506-b8c4-c0b0eb475b97.png">
+
+## 比较运算符
+<img width="413" alt="Screen Shot 2021-11-06 at 1 41 22 PM" src="https://user-images.githubusercontent.com/27160394/140599317-2a67c454-8800-4685-af61-37765197080c.png">
+* 比较运算符可以用于比较数字、字符串和表达式。数字作为浮点数比较，而字符串以不 区分大小写的方式进行比较
+* `“=”`运算符，用于比较运算符两侧的操作数是否相等，如果两侧操作数相等返回值为1,否则为 0。注意`NULL`不能用于`“=”`比较
+* <=>”安全的等于运算符，和“=”类似,不同之处在于即使 操作的值为 NULL 也可以正确比较
+* `“BETWEEN”`运算符的使用格式为`“a BETWEEN min AND max”`
+* `“IN”`运算符的使用格式为`“a IN (value1,value2,...)`
+* `“LIKE”`运算符的使用格式为`“a LIKE %123%”`,当 a 中含有字符串“123”时，则返回 值为 1，否则返回 0
+* `REGEXP`运算符的使用格式为`“str REGEXP str_pat”,`当 `str` 字符串中含有 `str_pat` 相匹配的字符串时，则返回值为 1，否则返回0
+
+## 逻辑运算符
+* `NOT` -> `!`,就是 NOT NULL 的返回值为 NULL
+* `AND` -> `&&`
+* `OR` -> `||`,假如两个操作数均为 NULL，则所得结果 为 NULL
+* `XOR`
+
+## 位运算符
+<img width="373" alt="Screen Shot 2021-11-06 at 1 48 37 PM" src="https://user-images.githubusercontent.com/27160394/140599449-b4179fd3-3beb-4c4e-9553-468876309e72.png">
+
+<img width="554" alt="Screen Shot 2021-11-06 at 1 49 52 PM" src="https://user-images.githubusercontent.com/27160394/140599471-f66d3dd9-1cf6-4c24-8d6a-7643b745a17d.png">
+---
+# 常用函数
+MySQL 提供了多种内建函数帮助开发人员编写简单快捷的SQL语句，其中常用的函数有字符串函数,日期函数和数值函数
+
+## 字符串函数
+* CANCAT(S1,S2,...Sn)函数:把传入的参数连接成为一个字符串。
+* INSERT(str ,x,y,instr)函数:将字符串 str 从第 x 位置开始，y 个字符长的子串替换为字符 串 instr
+* LOWER(str)和 UPPER(str)函数:把字符串转换成小写或大写
+* LEFT(str,x)和 RIGHT(str,x)函数:分别返回字符串最左边的x个字符和最右边的x个字符。 如果第二个参数是 NULL，那么将不返回任何字符串
+* LPAD(str,n ,pad)和 RPAD(str,n ,pad)函数:用字符串 pad 对 str 最左边和最右边进行填充, 直到长度为 n 个字符长度
+* LTRIM(str)和 RTRIM(str)函数:去掉字符串 str 左侧和右侧空格,TRIM(str)函数:去掉目标字符串的开头和结尾的空格。
+* REPEAT(str,x)函数:返回 str 重复 x 次的结果。
+* REPLACE(str,a,b)函数:用字符串 b 替换字符串 str 中所有出现的字符串 a。
+* SUBSTRING(str,x,y)函数:返回从字符串 str 中的第 x 位置起 y 个字符长度的字串。
+
+## 数值函数
+<img width="367" alt="Screen Shot 2021-11-06 at 1 54 21 PM" src="https://user-images.githubusercontent.com/27160394/140599581-1871d7a7-46e4-4841-a367-76c313b7cf26.png">
+
+## 日期和时间函数
+<img width="399" alt="Screen Shot 2021-11-06 at 1 55 42 PM" src="https://user-images.githubusercontent.com/27160394/140599618-6686f73d-00bf-4cd0-bfa6-cade8f71bd13.png">
+
+## 流程函数
+<img width="309" alt="Screen Shot 2021-11-06 at 1 57 00 PM" src="https://user-images.githubusercontent.com/27160394/140599646-765a8902-859b-48f3-8d8d-0dbc3aa8911b.png">
+```
+select case salary when 1000 then 'low' when 2000 then 'mid' else 'high' end from salary;
+```
