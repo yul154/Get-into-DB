@@ -186,24 +186,74 @@ SELECT * FROM t1 UNION|UNION ALL SELECT * FROM t2 // UNION 是将 UNION ALL 后�
 ```
 ### MySQL查询
 > `count(*)`和`count(1)`和`count(列名)`区别
+COUNT 函数是一个聚合函数，它返回符合条件行数.
+
+COUNT(常量) 和 `COUNT(*)` 表示的是直接查询符合条件的数据库表的行数,COUNT(列名)表示的是查询符合条件的列的值不为NULL的行数。
+* `count(*)`包括了所有的列，相当于行数，在统计结果的时候，不会忽略列值为NULL  
+* `count(1)`基本上只是为每行计算一个常量值 1 列，在统计结果的时候，不会忽略列值为NULL 
+* `count(列名)`只包括列名那一列，在统计结果的时候，会忽略列值为空（这里的空不是只空字符串或者0，而是表示null）的计数，即某个字段值为NULL时，不统计
+* MyISAM做了一个简单的优化，把表的总行数单独记录下来，如果执行`count(*)`时可以直接返回，前提是不能有where条件
+
+
+执行效率
+* 列名为主键,count(列名)会比count(1)快
+* 列名不为主键count(1)会比count(列名)快
+* 如果表多个列并且没有主键，则 count(1) 的执行效率优于`count(*)`
+* 如果有主键，则 select count（主键）的执行效率是最优的
+* 如果表只有一个字段，则`select count(*)`最优
 * 如果该表只有一个主键索引,没有任何二级索引的情况下,那么`COUNT(*)`和`COUNT(1)`都是通过通过主键索引来统计行数的。
 * 如果该表有二级索引，则`COUNT(1)`和`COUNT(*)`都会通过占用空间最小的字段的二级索引进行统计,也就是说虽然COUNT(1)指定了第一列（此处表达有误，详见文章结尾）但是innodb不会真的去统计主键索引
+
+> 在INNODB与MYISAM中统计当前数据行，用`count(*)`有什么区别
+* MyISAM `COUNT(*)`is optimized to return very quickly if the SELECT retrieves from one table, no other columns are retrieved, and there is no WHERE clause.This optimization only applies to MyISAM tables,because an exact row count is stored for this storage engine and can be accessed very quickly
+* InnoDB不保存表的具体行数，执行`count(*)`时需要全表扫描。那么为什么InnoDB没有了这个变量呢？因为InnoDB的事务特性，在同一时刻表中的行数对于不同的事务而言是不一样的，因此count统计会计算对于当前事务而言可以统计到的行数，而不是将总行数储存起来方便快速查询.
+
+> MySQL中 in和 exists 的区别？
+* in是把外表和内表做hash连接，先查询内表，再把内表结果与外表匹配，对外表使用索引（外表效率高，可用大表),而内表多大都需要查询,不可避免,故外表大的使用in,可加快效率
+* exists是对外表做loop循环，每次loop循环再对内表（子查询）进行查询，那么因为对内表的查询使用的索引（内表效率高，故可用大表），而外表有多大都需要遍历，不可避免（尽量用小表），故内表大的使用exists，可加快效率
+* 如果查询的两个表大小相当，那么用in和exists差别不大。
+* IN适合于外表大而内表小的情况；
+* EXISTS适合于外表小而内表大的情况。
+* 如果查询语句使用了not in 那么内外表都进行全表扫描，没有用到索引；而not extsts 的子查询依然能用到表上的索引。所以无论那个表大，用not exists都比not in要快。
+
+> UNION和UNION ALL的区别?
+UNION和UNION ALL都是将两个结果集合并为一个，两个要联合的SQL语句 字段个数必须一样，而且字段类型要“相容”（一致）；
+* UNION在进行表连接后会筛选掉重复的数据记录（效率较低），而UNION ALL则不会去掉重复的数据记录；
+* UNION会按照字段的顺序进行排序，而UNION ALL只是简单的将两个结果合并就返回；
+
+
 
 ##  DCL
 主要是 DBA 用来管理系统中的对象权限时所使用
 ```
 grant select,insert on sakila.* to 'z1'@'localhost' identified by '123
 ```
-完整的顺序是：
-1、FROM子句组装数据（包括JOIN）
-2、WHERE子句进行条件筛选
-3、GROUP BY分组
-4、使用聚集函数进行计算；
-5、HAVING筛选分组；
-6、计算所有的表达式；
-7、SELECT 的字段；
-8、ORDER BY排序
-9、LIMIT筛选
+
+手写顺序
+```
+SELECT DISTINCT <select_list>
+FROM  <left_table> <join_type>
+JOIN  <right_table> ON <join_condition>
+WHERE  <where_condition>
+GROUP BY  <group_by_list>
+HAVING <having_condition>
+ORDER BY <order_by_condition>
+LIMIT <limit_number>
+
+```
+机读顺序
+```
+FROM  <left_table>
+ON <join_condition>
+<join_type> JOIN  <right_table> 
+WHERE  <where_condition>
+GROUP BY  <group_by_list>
+HAVING <having_condition>
+SELECT
+DISTINCT <select_list>
+ORDER BY <order_by_condition>
+LIMIT <limit_number>
+```
 ---
 # MySQL 支持的数据类型
 > MySQL 提供了多种数据类型,主要包括数值型、字符串类型、日期和时间类型
@@ -618,7 +668,6 @@ SHOW INDEX FROM table_name\G  //可以通过添加 \G 来格式化输出信息�
 * 空间索引是对空间数据类型的字段建立的索引，MYSQL中的空间数据类型有4种，分别是GEOMETRY、POINT、LINESTRING、POLYGON。MYSQL使用SPATIAL关键字进行扩展，使得能够用于创建正规索引类型的语法创建空间索引。创建空间索引的列，必须将其声明为NOT NULL，空间索引只能在存储引擎为MYISAM的表中创建
 
 
-> 为什么MySQL 索引中用B+tree，不用B-tree 或者其他树，为什么不用 Hash 索引 聚簇索引/非聚簇索引，MySQL 索引底层实现，叶子结点存放的是数据还是指向数据的内存地址，使用索引需要注意的几个地方？使用索引查询一定能提高查询的性能吗？为什么?
 
 ## MySQL索引结构
 > 索引（index）是在存储引擎(storage engine)层面实现的，而不是server层面
@@ -654,12 +703,36 @@ m阶的B-Tree的特性
 * Pi(i=1,…n)为指向子树根节点的指针。P(i-1)指向的子树的所有节点关键字均小于ki，但都大于k(i-1)
 
 ### B+Tree索引
+
+数据库中B+Tree的高度一般在2-4之间，即查找某一键值的行记录时最多进行2-4次IO
+
 * MyISAM 和 InnoDB 存储引擎，都使用 B+Tree的数据结构
-* 它相对与 B-Tree结构，所有的数据都存放在叶子节点上，且把叶子节点通过指针连接到一起，形成了一条数据链表，以加快相邻数据的检索效率。
+* 它相对与B-Tree结构，非叶子节点只存储键值信息, 所有的数据都存放在叶子节点上,所有叶子节点之间都有一个链指针.且把叶子节点通过指针连接到一起，形成了一条数据链表，以加快相邻数据的检索效率。
+* 对B+Tree进行两种查找运算: 一种是对于主键的范围查找和分页查找,另一种是从根节点开始，进行随机查找.因为在B+Tree上有两个头指针,一个指向根节点,另一个指向关键字最小的叶子节点，所有叶子节点（即数据节点）之间是一种链式环结构
+* MySQL的InnoDB存储引擎在设计时是将根节点常驻内存的，也就是说查找某一键值的行记录时最多只需要1~3次磁盘I/O操作
+
+
+B+Tree索引可以分为聚集索引(clustered index)和辅助索引(secondary index)
+* 聚集索引的B+Tree中的叶子节点存放的是整张表的行记录数据
+* 辅助索引的叶子节点并不包含行记录的全部数据,而是存储相应行数据的聚集索引键,即主键.当通过辅助索引来查询数据时.InnoDB会遍历辅助索引找到主键,然后再通过主键在聚集索引中找到完整的行记录数据
+
+
+
+> 为什么MySQL 索引中用B+tree，不用B-tree 或者其他树，为什么不用Hash索引，聚簇索引/非聚簇索引，
+
+* Hash 索引结构的特殊性,其检索效率非常高,索引的检索可以一次定位,不像B+Tree 索引需要从根节点到枝节点，最后才能访问到页节点这样多次的IO访问，所以Hash索引的查询效率要远高于 B+Tree 索引
+* Hash 索引无法被用来避免数据的排序操作
+* Hash 索引遇到大量Hash值相等的情况后性能并不一定就会比B+Tree索引高
+ 
+
+
+
+> MySQL 索引底层实现，叶子结点存放的是数据还是指向数据的内存地址，
+> 使用索引需要注意的几个地方？使用索引查询一定能提高查询的性能吗？为什么?
 
 
 ## 设计索引的原则
-* 搜索的索引列,不一定是所要选择的列. 换句话说, 最适合索引的列是出现在WHERE子句中的列或连接子句中指定的列,而不是出现在 SELECT 关键字后的选择列表中的列
+* 在经常需要搜索的列上，可以加快搜索的速度.搜索的索引列,不一定是所要选择的列. 换句话说, 最适合索引的列是出现在WHERE子句中的列或连接子句中指定的列,而不是出现在 SELECT 关键字后的选择列表中的列
 * 使用惟一索引。考虑某列中值的分布。索引的列的基数越大，索引的效果越好.例如生日和性别
 * 使用短索引.如果对字符串列进行索引,应该指定一个前缀长度,只要有可能就应该这样做
  * 如果有一个 CHAR(200)列，如果在前 10 个或 20 个字符内，多数值是惟一的，那么就不要对整个列进行索引。
