@@ -128,7 +128,7 @@ mysql不是每次数据更改都立刻写到磁盘,而是会先将修改后的�
 *重做日志(redo log)和归档日志(binlog)*
 
 Redo log
-> 为了解决crash-safe问题而产生的，是一种物理日志，是用来记录这个页"做了什么改动"
+> 为了解决crash-safe问题而产生的，是一种物理日志，是用来记录这个页"做了什么改动"，它用来恢复提交后的物理数据页
 
 持久性:只要事务提交成功，那么对数据库做的修改就被永久保存下来了，不可能因为任何原因再回到原来的状态
 * 每次事务提交的时候，将该事务涉及修改的数据页全部刷新到磁盘中
@@ -138,7 +138,12 @@ Redo log
 redo log包括两部分
 * 内存中的日志缓冲(redo log buffer)
 * 磁盘上的日志文件(redo logfile)
-mysql每执行一条DML语句,先将记录写入 redo log buffer,后续某个时间点再一次性将多个操作记录写到redo log file.这种先写日志,再写磁盘的技术就是 MySQL里经常说到的 WAL(Write-Ahead Logging) 技术。
+
+生成的日志都得先保存起来,但又不能在还没commit的时候就直接写到 redo log 文件
+* mysql每执行一条DML语句,先将记录写入 redo log buffer
+* 后续某个时间点再一次性将多个操作记录写到redo log file.
+* 这种先写日志,再写磁盘的技术就是 MySQL里经常说到的 WAL(Write-Ahead Logging) 技术。
+* 如果发生宕机，则读取磁盘上的 redo log file 进行数据的恢复
 
 ![image](https://user-images.githubusercontent.com/27160394/140596469-31603a55-eb39-48cb-8ff7-b7faa87a6b8b.png)
 
@@ -163,17 +168,10 @@ binlog 日志有三种格式
 
 
 ## 两阶段提交
-1. UPDATE语句的结果写入内存，同时将这个操作写入redo log，此时redo log处于prepare状态，并告知执行器随时可以提交事物
-2. 执行器生成这个操作的binlog，并写入binlog日志. 
-3. 执行器通知将之前处于prepare状态改为commit状态，更新完成。
-
-两个阶段提交保证了redo log和binlog的一致性
-* 先写redo log后写binlog,redo log会恢复crash的语句，但是如果用这产生时的binlog去恢复数据库就会丢失这条记录，此时两个日志恢复的数据库数据就产生了差异
-* 先写binlog后写redo log,redo log中还没写,此时异常重启后这个事务是无效的,所以无法恢复,但是binlog中有这条数据,当用此时的binlog文件去恢复数据库的时候,就会比当前的数据库数据多一条记录。
 
 执行器和InnoDB引擎在执行这个简单的update语句时的内部流程:
 1. 执行器先找引擎取ID=2这一行，ID是主键，引擎直接用树搜索找到这一行，如果ID=2这一行所在的数据页本就在内存中，就直接返回给执行器，否则需要从磁盘读入再返回；
-2. 执行器拿到引擎给的行数据后，将值加1，原来是N，现在就是N+1，得到新的一行数据，再调用引擎接口写入这行新数据；
+2. 执行器拿到引擎给的行数据后，更新数据，再调用引擎接口写入这行新数据；
 3. 引擎将这行新数据更新到内存中，同时将这个更新操作记录到redo log里面，此时redo log处于prepare状态。然后告知执行器执行完成了，随时可以提交事务
 4. 执行器生成这个操作的binlog，并把binlog写入磁盘
 5. 执行器调用引擎的提交事务接口，引擎把刚刚写入的redo log改成提交（commit）状态，更新完成
@@ -181,6 +179,17 @@ binlog 日志有三种格式
 
 
 ![image](https://user-images.githubusercontent.com/27160394/140596830-ff8ff742-f9cc-4106-b40a-a4c76dbbec67.png)
+
+
+1. UPDATE语句的结果写入内存，同时将这个操作写入redo log，此时redo log处于prepare状态，并告知执行器随时可以提交事物
+2. 执行器生成这个操作的binlog，并写入binlog日志. 
+3. 执行器通知将之前处于prepare状态改为commit状态，更新完成。
+
+两个阶段提交： 保证了redo log和binlog的一致性
+* 先写redo log后写binlog,因为redo log写完了，恢复系统的时候name='god-jiang'.但是binlog没有写完,所以binlog没有记录这条语句,这个时候用binlog恢复数据的时候,恢复出来的name就是原来值,与redo log不同。
+* 先写binlog后写redo log,redo log中还没写,此时异常重启后这个事务是无效的,所以无法恢复,但是binlog中有这条数据,当用此时的binlog文件去恢复数据库的时候,就会比当前的数据库数据多一条记录。
+
+
 
 Note
 * Redo log不是记录数据页“更新之后的状态”，而是记录这个页 “做了什么改动”。
