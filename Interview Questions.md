@@ -188,4 +188,35 @@ binlog是基于point-in-time recovery，保证服务器可以基于时间点对�
 > Mysql 日志的作用
 > Mysql 引擎支持的锁
 > 慢查询了解吗
-> 
+* 设置一个阈值，将运行时间超过该值的所有SQL语句都记录到慢查询的日志文件中
+* 使用 Explain 关键字可以模拟优化器执行SQL查询语句，从而知道 MySQL 是如何处理你的 SQL 语句的
+```
+slow_query_log	是否开启慢查询日志，ON表示开启，OFF表示关闭
+slow-query-log-file	慢查询日志存储路径
+long_query_time	当查询时间多于设定的阈值时，记录日志
+log_queries_not_using_indexes	未使用索引的查询也被记录到慢查询日志中（可选项）
+log_output	FILE 或者 TABLE，分别表示 记录到文件 或者 mysql.slow_log表中。也可同时设置，定义log_output='FILE,TABLE'
+```
+```
+select_type
+SIMPLE：简单的SELECT，不实用UNION或者子查询。
+2） PRIMARY：最外层SELECT。
+3） UNION：第二层，在SELECT之后使用了UNION。
+4） DEPENDENT UNION：UNION语句中的第二个SELECT，依赖于外部子查询。
+5） UNION RESULT：UNION的结果。
+
+table
+type： 
+5） index：全索引扫描。
+6） index_merge：查询中同时使用两个（或更多）索引，然后对索引结果进行合并（merge），再读取表数据。
+7） index_subquery：子查询中的返回结果字段组合是一个索引（或索引组合），但不是一个主键或唯一索引。
+8） rang：索引范围扫描。
+9） ref：Join语句中被驱动表索引引用的查询。
+10） ref_or_null：与ref的唯一区别就是在使用索引引用的查询之外再增加一个空值的查询。
+11） system：系统表，表中只有一行数据
+```
+
+
+> Innodb 为啥用递增主键
+* InnoDB使用聚集索引，数据记录本身被存于主索引（一颗B+Tree）的叶子节点上。这就要求同一个叶子节点内（大小为一个内存页或磁盘页）的各条数据记录按主键顺序存放，因此每当有一条新的记录插入时，MySQL会根据其主键将其插入适当的节点和位置，这样就会形成一个紧凑的索引结构，近似顺序填满。由于每次插入时也不需要移动已有数据，因此效率很高
+* 如果使用非自增主键（如果身份证号或学号等），由于每次插入主键的值近似于随机，因此每次新纪录都要被插到现有索引页得中间某个位置：此时 MySQL 不得不为了将新记录插到合适位置而移动数据，甚至目标页面可能已经被回写到磁盘上而从缓存中清掉，此时又要从磁盘上读回来，这增加了很多开销，同时频繁的移动、分页操作造成了大量的碎片，得到了不够紧凑的索引结构，后续不得不通过OPTIMIZE TABLE 来重建表并优化填充页面
