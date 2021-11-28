@@ -1,5 +1,6 @@
 * 索引优化
 * SQL优化
+* 分库分表
 
 -----
 # 性能分析
@@ -10,7 +11,6 @@ MySQL常见性能分析手段
 * show命令查询系统状态及系统变量
 ---
 # SQL 优化
-# MySQL调优
 
 ## 优化 SQL 语句的一般步骤
 
@@ -48,7 +48,7 @@ MySQL常见性能分析手段
 查看索引使用情况
 * `Handler_read_key` 的值将很高，这个值代表了一个行被索引值读的次数，很低的值表明增加索引得到的性能改善不高，因为索引并不经常使用
 * `Handler_read_rnd_next`的值高则意味着查询运行低效，并且应该建立索引补救
-* 
+
 
 ### 两个简单实用的优化方法
 1. 定期分析表和检查表
@@ -113,3 +113,102 @@ group by实质是先排序后进行分组，遵照索引建的最佳左前缀
 * 应当遵循最小原则：一般情况下，应该尽量使用可以正确存储数据的最小数据类型.简单就好：简单的数据类型通常需要更少的CPU周期,尽量使用int而不是bigint
 * 尽量避免NULL：通常情况下最好指定列为NOT NULL
 * 可以使用函数`PROCEDURE ANALYSE()`对当前应用的表进行分析，该函数可 以对数据表中列的数据类型提出优化建议
+
+---
+## 索引优化
+* 选择合适的索引列
+* 找散列性大的，有标识度的字段做索引
+* 索引的值尽量别太大
+* 覆盖索引
+* 联合索引
+* 索引下推： 对索引中包含的字段先做判断，直接过滤掉不满足条件的记录，减少回表次数
+* .索引列不能参与计算，保持列“干净
+* 使用前缀索引，定义好长度，就可以做到既节省空间，又不用额外增加太多的查询成本
+* =和in可以乱序，比如a = 1 and b = 2 and c = 3 建立(a,b,c)索引可以任意顺序，mysql的查询优化器会帮你优化成索引可以识别的形式
+---
+## SQL 优化
+* 覆盖索引
+* 不建议使用%前缀模糊查询
+* 避免在where子句中对字段进行表达式操作
+* 避免隐式类型转换
+---
+## 数据表结构优化
+* 选择合适的数据类型
+ * 使用可存下数据的最小的数据类型。
+ * 使用简单地数据类型
+ * 尽量少用text
+
+* 将字段很多的表分解成多个表
+* 增加中间表
+* 分解关联查询
+
+---
+### 性能瓶颈定位
+* 通过 show 命令查看 MySQL 状态及变量，找到系统的瓶颈
+```
+Mysql> show status ——显示状态信息（扩展show status like ‘XXX’）
+
+Mysql> show variables ——显示系统变量（扩展show variables like ‘XXX’）
+
+Mysql> show innodb status ——显示InnoDB存储引擎的状态
+
+Mysql> show processlist ——查看当前SQL执行，包括执行状态、是否锁表等
+
+Shell> mysqladmin variables -u username -p password——显示系统变量
+
+Shell> mysqladmin extended-status -u username -p password——显示状态信息
+```
+
+### Explain(执行计划)
+> 使用 Explain 关键字可以模拟优化器执行SQL查询语句，从而知道 MySQL 是如何处理你的 SQL 语句的。分析你的查询语句或是表结构的性能瓶颈
+
+执行计划包含的信息（如果有分区表的话还会有partitions）
+
+![image](https://user-images.githubusercontent.com/27160394/140641340-525b1246-9606-47e6-949f-e1449a037f42.png)
+
+* `id`:select查询的序列号,表示查询中执行select子句或操作表的顺序
+ * id相同，执行顺序从上往下
+ * id全不同，如果是子查询，id的序号会递增，id值越大优先级越高，越先被执行
+ * id部分相同，执行顺序是先按照数字大的先执行，然后数字相同的按照从上往下的顺序执行
+* `select_type`:查询的类型，主要是用于区分普通查询、联合查询、子查询等复杂的查询
+ * SIMPLE ：简单的select查询，查询中不包含子查询或UNION
+ * PRIMARY：查询中若包含任何复杂的子部分，最外层查询被标记为PRIMARY
+ * SUBQUERY：在select或where列表中包含了子查询
+ * DERIVED：在from列表中包含的子查询被标记为derived（衍生）
+ *  UNION：若第二个select出现在union之后
+ *  UNION RESULT：从union表获取结果的select
+* type 访问类型: 从最好到最差依次排列system>const>eq_ref>ref>fulltext>ref_or_null>index_merge >unique_subquery>index_subquery>range>index>ALL
+  * system：表只有一行记录（等于系统表），是 const 类型的特例，平时不会出现
+  * const：表示通过索引一次就找到了,const用于比较primary key 或 unique 索引
+  * range：只检索给定范围的行，使用一个索引来选择行
+  * index：Full Index Scan，index于ALL区别为index类型只遍历索引树。通常比ALL快
+  * ALL：Full Table Scan，将遍历全表找到匹配的行
+* key: 实际使用的索引，如果为NULL，则没有使用索引
+* key_len表示索引中使用的字节数，可通过该列计算查询中使用的索引的长度
+* ref: 显示索引的那一列被使用了，如果可能，是一个常量const
+
+### 慢查询日志
+> MySQL 提供的一种日志记录，它用来记录在 MySQL 中响应时间超过阈值的语句，具体指运行时间超过 long_query_time 值的 SQL，则会被记录到慢查询日志中
+
+* long_query_time 的默认值为10，意思是运行10秒以上的语句
+* 默认情况下，MySQL数据库没有开启慢查询日志，需要手动设置参数开启
+
+```
+SHOW VARIABLES LIKE '%slow_query_log%'
+mysql> set global slow_query_log='ON';
+mysql> set global slow_query_log_file='/var/lib/mysql/hostname-slow.log';
+mysql> set global long_query_time=2;
+
+```
+MySQL提供了日志分析工具mysqldumpslow,通过 mysqldumpslow --help 查看操作帮助信息
+```
+
+```
+
+### Show Profile 分析查询
+> Show Profile命令查看执行状态
+* Show Profile 是 MySQL 提供可以用来分析当前会话中语句执行的资源消耗情况。可以用于SQL的调优的测量
+* 默认情况下，参数处于关闭状态，并保存最近15次的运行结果
+* 开启功能，默认是关闭，使用前需要开启 mysql>set profiling=1;
+* 运行SQL
+* 查看结果
