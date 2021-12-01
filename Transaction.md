@@ -211,6 +211,8 @@ Redo log 持久化策略
 
 <img width="347" alt="Screen Shot 2021-11-13 at 7 40 40 PM" src="https://user-images.githubusercontent.com/27160394/141642394-cc5a1287-726c-4310-8dee-0ac1d05cfa55.png">
 
+
+> 用户空间的数据持久化到磁盘中，需要先调用write系统调用，把数据先写入内核空间，之后再调用fsync系统调用，将内核空间的数据写入到磁盘中
 日志刷盘时机 (innodb_flush_log_at_trx_commit)
 * 0：在事务提交时，innodb 不会立即触发将缓存日志写到磁盘文件的操作，而是每秒触发一次缓存日志回写磁盘操作，并调用系统函数 fsync 刷新 IO 缓存。这种方式效率最高，也最不安全
 * 1：在每个事务提交时，innodb 立即将缓存中的 redo 日志回写到日志文件，并调用 fsync 刷新 IO 缓存。
