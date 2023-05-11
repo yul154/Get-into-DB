@@ -1,12 +1,13 @@
-# Mysql basic knowledge
-# SQL
-# Data type
-# 存储引擎
-# 索引
-# Transactions
-# 锁机制
-# 性能优化
-# 分区分库
+# Mysql
+* Mysql basic knowledge
+*  SQL
+*  Data type
+*  存储引擎
+*  索引
+*  Transactions
+*  锁机制
+*  性能优化
+*  分区分库
 ----
 # Mysql 框架
 ![image](https://user-images.githubusercontent.com/27160394/140594674-19156356-f2ba-42d7-9401-b8cab5168324.png)
